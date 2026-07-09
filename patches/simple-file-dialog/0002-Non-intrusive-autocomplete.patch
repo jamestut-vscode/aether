@@ -1,0 +1,113 @@
+From 7d9bc06e48b96cc2fd94870932a4edcf26382958 Mon Sep 17 00:00:00 2001
+From: James <aslan.jnn@gmail.com>
+Date: Fri, 28 Apr 2023 22:10:40 +1000
+Subject: Non intrusive autocomplete
+
+---
+ .../dialogs/browser/simpleFileDialog.ts       | 33 +++++--------------
+ 1 file changed, 8 insertions(+), 25 deletions(-)
+
+diff --git a/src/vs/workbench/services/dialogs/browser/simpleFileDialog.ts b/src/vs/workbench/services/dialogs/browser/simpleFileDialog.ts
+index 3a269eae..72308b1b 100644
+--- a/src/vs/workbench/services/dialogs/browser/simpleFileDialog.ts
++++ b/src/vs/workbench/services/dialogs/browser/simpleFileDialog.ts
+@@ -370,7 +370,6 @@ export class SimpleFileDialog extends Disposable implements ISimpleFileDialog {
+ 		this.isWindows = this.scopedAuthority ? false : await this.checkIsWindowsOS();
+ 		let homedir: URI = this.options.defaultUri ? this.options.defaultUri : this.workspaceContextService.getWorkspace().folders[0].uri;
+ 		let stat: IFileStatWithPartialMetadata | undefined;
+-		const ext: string = resources.extname(homedir);
+ 		if (this.options.defaultUri) {
+ 			try {
+ 				stat = await this.fileService.stat(this.options.defaultUri);
+@@ -418,12 +417,16 @@ export class SimpleFileDialog extends Disposable implements ISimpleFileDialog {
+ 
+ 			let isResolving: number = 0;
+ 			let isAcceptHandled = false;
+-			this.currentFolder = resources.dirname(homedir);
++			this.currentFolder = homedir;
+ 			this.userEnteredPathSegment = '';
+ 			this.autoCompletePathSegment = '';
+ 
+ 			this.filePickBox.title = this.options.title;
+-			this.filePickBox.value = this.pathFromUri(this.currentFolder, true);
++			if (this.trailing) {
++				this.filePickBox.value = this.pathFromUri(resources.joinPath(this.currentFolder, this.trailing), false);
++			} else {
++				this.filePickBox.value = this.pathFromUri(this.currentFolder, true);
++			}
+ 			this.filePickBox.valueSelection = [this.filePickBox.value.length, this.filePickBox.value.length];
+ 
+ 			const doResolve = (uriOrUris: URI | URI[] | undefined) => {
+@@ -500,10 +503,6 @@ export class SimpleFileDialog extends Disposable implements ISimpleFileDialog {
+ 				if ((i.length === 1) && this.isSelectionChangeFromUser()) {
+ 					this.filePickBox.validationMessage = undefined;
+ 					const userPath = this.constructFullUserPath();
+-					if (!equalsIgnoreCase(this.filePickBox.value.substring(0, userPath.length), userPath)) {
+-						this.filePickBox.valueSelection = [0, this.filePickBox.value.length];
+-						this.insertText(userPath, userPath);
+-					}
+ 					this.setAutoComplete(userPath, this.userEnteredPathSegment, i[0], true);
+ 				}
+ 			}));
+@@ -520,12 +519,7 @@ export class SimpleFileDialog extends Disposable implements ISimpleFileDialog {
+ 
+ 			this.filePickBox.show();
+ 			this.contextKey.set(true);
+-			this.updateItems(homedir, true, this.trailing).then(() => {
+-				if (this.trailing) {
+-					this.filePickBox.valueSelection = [this.filePickBox.value.length - this.trailing.length, this.filePickBox.value.length - ext.length];
+-				} else {
+-					this.filePickBox.valueSelection = [this.filePickBox.value.length, this.filePickBox.value.length];
+-				}
++			this.updateItems(homedir, false, this.trailing).then(() => {
+ 				this.busy = false;
+ 			});
+ 		});
+@@ -627,7 +621,7 @@ export class SimpleFileDialog extends Disposable implements ISimpleFileDialog {
+ 			const item = this.filePickBox.selectedItems[0];
+ 			if (item.isFolder) {
+ 				if (this.trailing) {
+-					await this.updateItems(item.uri, true, this.trailing);
++					await this.updateItems(item.uri, true);
+ 				} else {
+ 					// When possible, cause the update to happen by modifying the input box.
+ 					// This allows all input box updates to happen first, and uses the same code path as the user typing.
+@@ -852,14 +846,11 @@ export class SimpleFileDialog extends Disposable implements ISimpleFileDialog {
+ 
+ 	private insertText(wholeValue: string, insertText: string) {
+ 		if (this.filePickBox.inputHasFocus()) {
+-			getActiveDocument().execCommand('insertText', false, insertText);
+ 			if (this.filePickBox.value !== wholeValue) {
+ 				this.filePickBox.value = wholeValue;
+-				this.handleValueChange(wholeValue);
+ 			}
+ 		} else {
+ 			this.filePickBox.value = wholeValue;
+-			this.handleValueChange(wholeValue);
+ 		}
+ 	}
+ 
+@@ -997,7 +988,6 @@ export class SimpleFileDialog extends Disposable implements ISimpleFileDialog {
+ 		this.autoCompletePathSegment = '';
+ 		const wasDotDot = trailing === '..';
+ 		trailing = wasDotDot ? undefined : trailing;
+-		const isSave = !!trailing;
+ 		let result = false;
+ 
+ 		const updatingPromise = createCancelablePromise(async token => {
+@@ -1031,13 +1021,6 @@ export class SimpleFileDialog extends Disposable implements ISimpleFileDialog {
+ 					this.filePickBox.valueSelection = [0, this.filePickBox.value.length];
+ 					this.insertText(newValue, newValue);
+ 				}
+-				if (force && trailing && isSave) {
+-					// Keep the cursor position in front of the save as name.
+-					this.filePickBox.valueSelection = [this.filePickBox.value.length - trailing.length, this.filePickBox.value.length - trailing.length];
+-				} else if (!trailing) {
+-					// If there is trailing, we don't move the cursor. If there is no trailing, cursor goes at the end.
+-					this.filePickBox.valueSelection = [this.filePickBox.value.length, this.filePickBox.value.length];
+-				}
+ 				this.busy = false;
+ 				this.updatingPromise = undefined;
+ 				return result;
+-- 
+2.50.1 (Apple Git-155)

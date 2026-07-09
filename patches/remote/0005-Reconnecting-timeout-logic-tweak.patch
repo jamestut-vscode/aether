@@ -1,0 +1,210 @@
+From 7bfc55c1bb1cca4dbd3408907e255bd2ef47d639 Mon Sep 17 00:00:00 2001
+From: James <aslan.jnn@gmail.com>
+Date: Wed, 8 Jul 2026 18:20:00 +1000
+Subject: Tweak remote reconnecting timeout
+
+---
+ .../remote/common/remoteAgentConnection.ts    | 58 +++++++++----------
+ 1 file changed, 28 insertions(+), 30 deletions(-)
+
+diff --git a/src/vs/platform/remote/common/remoteAgentConnection.ts b/src/vs/platform/remote/common/remoteAgentConnection.ts
+index f87f8c67..4ac96d7f 100644
+--- a/src/vs/platform/remote/common/remoteAgentConnection.ts
++++ b/src/vs/platform/remote/common/remoteAgentConnection.ts
+@@ -21,7 +21,7 @@ import { RemoteAuthorityResolverError, RemoteConnection } from './remoteAuthorit
+ import { IRemoteSocketFactoryService } from './remoteSocketFactoryService.js';
+ import { ISignService } from '../../sign/common/sign.js';
+ 
+-const RECONNECT_TIMEOUT = 30 * 1000 /* 30s */;
++const RECONNECT_TIMEOUT = 15 * 1000; // in milliseconds
+ 
+ export const enum ConnectionType {
+ 	Management = 1,
+@@ -90,16 +90,6 @@ function createTimeoutCancellation(millis: number): CancellationToken {
+ 	return source.token;
+ }
+ 
+-function combineTimeoutCancellation(a: CancellationToken, b: CancellationToken): CancellationToken {
+-	if (a.isCancellationRequested || b.isCancellationRequested) {
+-		return CancellationToken.Cancelled;
+-	}
+-	const source = new CancellationTokenSource();
+-	a.onCancellationRequested(() => source.cancel());
+-	b.onCancellationRequested(() => source.cancel());
+-	return source.token;
+-}
+-
+ class PromiseWithTimeout<T> {
+ 
+ 	private _state: 'pending' | 'resolved' | 'rejected' | 'timedout';
+@@ -225,12 +215,15 @@ function raceWithTimeoutCancellation<T>(promise: Promise<T>, timeoutCancellation
+ 	return result.promise;
+ }
+ 
+-async function connectToRemoteExtensionHostAgent<T extends RemoteConnection>(options: ISimpleConnectionOptions<T>, connectionType: ConnectionType, args: any | undefined, timeoutCancellationToken: CancellationToken): Promise<{ protocol: PersistentProtocol; ownsProtocol: boolean }> {
++async function connectToRemoteExtensionHostAgent<T extends RemoteConnection>(options: ISimpleConnectionOptions<T>, connectionType: ConnectionType, args: any | undefined): Promise<{ protocol: PersistentProtocol; ownsProtocol: boolean }> {
+ 	const logPrefix = connectLogPrefix(options, connectionType);
+ 
+ 	options.logService.trace(`${logPrefix} 1/6. invoking socketFactory.connect().`);
+ 
++	let timeoutCancellationToken: CancellationToken;
++
+ 	let socket: ISocket;
++	timeoutCancellationToken = createTimeoutCancellation(RECONNECT_TIMEOUT);
+ 	try {
+ 		socket = await createSocket(options.logService, options.remoteSocketFactoryService, options.connectTo, RemoteAuthorities.getServerRootPath(), `reconnectionToken=${options.reconnectionToken}&reconnection=${options.reconnectionProtocol ? 'true' : 'false'}`, connectionTypeToString(connectionType), `renderer-${connectionTypeToString(connectionType)}-${options.reconnectionToken}`, timeoutCancellationToken);
+ 	} catch (error) {
+@@ -253,6 +246,7 @@ async function connectToRemoteExtensionHostAgent<T extends RemoteConnection>(opt
+ 	}
+ 
+ 	options.logService.trace(`${logPrefix} 3/6. sending AuthRequest control message.`);
++	timeoutCancellationToken = createTimeoutCancellation(RECONNECT_TIMEOUT);
+ 	const message = await raceWithTimeoutCancellation(options.signService.createNewMessage(generateUuid()), timeoutCancellationToken);
+ 
+ 	const authRequest: AuthRequest = {
+@@ -262,8 +256,9 @@ async function connectToRemoteExtensionHostAgent<T extends RemoteConnection>(opt
+ 	};
+ 	protocol.sendControl(VSBuffer.fromString(JSON.stringify(authRequest)));
+ 
++	timeoutCancellationToken = createTimeoutCancellation(RECONNECT_TIMEOUT);
+ 	try {
+-		const msg = await readOneControlMessage<HandshakeMessage>(protocol, combineTimeoutCancellation(timeoutCancellationToken, createTimeoutCancellation(10000)));
++		const msg = await readOneControlMessage<HandshakeMessage>(protocol, timeoutCancellationToken);
+ 
+ 		if (msg.type !== 'sign' || typeof msg.data !== 'string') {
+ 			const error: any = new Error('Unexpected handshake message');
+@@ -273,6 +268,7 @@ async function connectToRemoteExtensionHostAgent<T extends RemoteConnection>(opt
+ 
+ 		options.logService.trace(`${logPrefix} 4/6. received SignRequest control message.`);
+ 
++		timeoutCancellationToken = createTimeoutCancellation(RECONNECT_TIMEOUT);
+ 		const isValid = await raceWithTimeoutCancellation(options.signService.validate(message, msg.signedData), timeoutCancellationToken);
+ 		if (!isValid) {
+ 			const error: any = new Error('Refused to connect to unsupported server');
+@@ -280,6 +276,7 @@ async function connectToRemoteExtensionHostAgent<T extends RemoteConnection>(opt
+ 			throw error;
+ 		}
+ 
++		timeoutCancellationToken = createTimeoutCancellation(RECONNECT_TIMEOUT);
+ 		const signed = await raceWithTimeoutCancellation(options.signService.sign(msg.data), timeoutCancellationToken);
+ 		const connTypeRequest: ConnectionTypeRequest = {
+ 			type: 'connectionType',
+@@ -316,10 +313,11 @@ interface IManagementConnectionResult {
+ 	protocol: PersistentProtocol;
+ }
+ 
+-async function connectToRemoteExtensionHostAgentAndReadOneMessage<T>(options: ISimpleConnectionOptions, connectionType: ConnectionType, args: any | undefined, timeoutCancellationToken: CancellationToken): Promise<{ protocol: PersistentProtocol; firstMessage: T }> {
++async function connectToRemoteExtensionHostAgentAndReadOneMessage<T>(options: ISimpleConnectionOptions, connectionType: ConnectionType, args: any | undefined): Promise<{ protocol: PersistentProtocol; firstMessage: T }> {
+ 	const startTime = Date.now();
+ 	const logPrefix = connectLogPrefix(options, connectionType);
+-	const { protocol, ownsProtocol } = await connectToRemoteExtensionHostAgent(options, connectionType, args, timeoutCancellationToken);
++	const { protocol, ownsProtocol } = await connectToRemoteExtensionHostAgent(options, connectionType, args);
++	const timeoutCancellationToken: CancellationToken = createTimeoutCancellation(RECONNECT_TIMEOUT);
+ 	const result = new PromiseWithTimeout<{ protocol: PersistentProtocol; firstMessage: T }>(timeoutCancellationToken);
+ 	result.registerDisposable(protocol.onControlMessage(raw => {
+ 		const msg: T = JSON.parse(raw.toString());
+@@ -340,8 +338,8 @@ async function connectToRemoteExtensionHostAgentAndReadOneMessage<T>(options: IS
+ 	return result.promise;
+ }
+ 
+-async function doConnectRemoteAgentManagement(options: ISimpleConnectionOptions, timeoutCancellationToken: CancellationToken): Promise<IManagementConnectionResult> {
+-	const { protocol } = await connectToRemoteExtensionHostAgentAndReadOneMessage(options, ConnectionType.Management, undefined, timeoutCancellationToken);
++async function doConnectRemoteAgentManagement(options: ISimpleConnectionOptions): Promise<IManagementConnectionResult> {
++	const { protocol } = await connectToRemoteExtensionHostAgentAndReadOneMessage(options, ConnectionType.Management, undefined);
+ 	return { protocol };
+ }
+ 
+@@ -358,8 +356,8 @@ interface IExtensionHostConnectionResult {
+ 	debugPort?: number;
+ }
+ 
+-async function doConnectRemoteAgentExtensionHost(options: ISimpleConnectionOptions, startArguments: IRemoteExtensionHostStartParams, timeoutCancellationToken: CancellationToken): Promise<IExtensionHostConnectionResult> {
+-	const { protocol, firstMessage } = await connectToRemoteExtensionHostAgentAndReadOneMessage<{ debugPort?: number }>(options, ConnectionType.ExtensionHost, startArguments, timeoutCancellationToken);
++async function doConnectRemoteAgentExtensionHost(options: ISimpleConnectionOptions, startArguments: IRemoteExtensionHostStartParams): Promise<IExtensionHostConnectionResult> {
++	const { protocol, firstMessage } = await connectToRemoteExtensionHostAgentAndReadOneMessage<{ debugPort?: number }>(options, ConnectionType.ExtensionHost, startArguments);
+ 	const debugPort = firstMessage && firstMessage.debugPort;
+ 	return { protocol, debugPort };
+ }
+@@ -369,10 +367,10 @@ export interface ITunnelConnectionStartParams {
+ 	port: number;
+ }
+ 
+-async function doConnectRemoteAgentTunnel(options: ISimpleConnectionOptions, startParams: ITunnelConnectionStartParams, timeoutCancellationToken: CancellationToken): Promise<PersistentProtocol> {
++async function doConnectRemoteAgentTunnel(options: ISimpleConnectionOptions, startParams: ITunnelConnectionStartParams): Promise<PersistentProtocol> {
+ 	const startTime = Date.now();
+ 	const logPrefix = connectLogPrefix(options, ConnectionType.Tunnel);
+-	const { protocol } = await connectToRemoteExtensionHostAgentAndReadOneMessage(options, ConnectionType.Tunnel, startParams, timeoutCancellationToken);
++	const { protocol } = await connectToRemoteExtensionHostAgentAndReadOneMessage(options, ConnectionType.Tunnel, startParams);
+ 	options.logService.trace(`${logPrefix} 6/6. handshake finished, connection is up and running after ${logElapsed(startTime)}!`);
+ 	return protocol;
+ }
+@@ -415,7 +413,7 @@ export async function connectRemoteAgentManagement(options: IConnectionOptions,
+ 	return createInitialConnection(
+ 		options,
+ 		async (simpleOptions) => {
+-			const { protocol } = await doConnectRemoteAgentManagement(simpleOptions, CancellationToken.None);
++			const { protocol } = await doConnectRemoteAgentManagement(simpleOptions);
+ 			return new ManagementPersistentConnection(options, remoteAuthority, clientId, simpleOptions.reconnectionToken, protocol);
+ 		}
+ 	);
+@@ -425,7 +423,7 @@ export async function connectRemoteAgentExtensionHost(options: IConnectionOption
+ 	return createInitialConnection(
+ 		options,
+ 		async (simpleOptions) => {
+-			const { protocol, debugPort } = await doConnectRemoteAgentExtensionHost(simpleOptions, startArguments, CancellationToken.None);
++			const { protocol, debugPort } = await doConnectRemoteAgentExtensionHost(simpleOptions, startArguments);
+ 			return new ExtensionHostPersistentConnection(options, startArguments, simpleOptions.reconnectionToken, protocol, debugPort);
+ 		}
+ 	);
+@@ -459,7 +457,7 @@ async function createInitialConnection<T extends PersistentConnection, O extends
+ 
+ export async function connectRemoteAgentTunnel(options: IConnectionOptions, tunnelRemoteHost: string, tunnelRemotePort: number): Promise<PersistentProtocol> {
+ 	const simpleOptions = await resolveConnectionOptions(options, generateUuid(), null);
+-	const protocol = await doConnectRemoteAgentTunnel(simpleOptions, { host: tunnelRemoteHost, port: tunnelRemotePort }, CancellationToken.None);
++	const protocol = await doConnectRemoteAgentTunnel(simpleOptions, { host: tunnelRemoteHost, port: tunnelRemotePort });
+ 	return protocol;
+ }
+ 
+@@ -680,7 +678,7 @@ export abstract class PersistentConnection extends Disposable {
+ 				this._options.logService.info(`${logPrefix} resolving connection...`);
+ 				const simpleOptions = await resolveConnectionOptions(this._options, this.reconnectionToken, this.protocol);
+ 				this._options.logService.info(`${logPrefix} connecting to ${simpleOptions.connectTo}...`);
+-				await this._reconnect(simpleOptions, createTimeoutCancellation(RECONNECT_TIMEOUT));
++				await this._reconnect(simpleOptions);
+ 				this._options.logService.info(`${logPrefix} reconnected!`);
+ 				this._onDidStateChange.fire(new ConnectionGainEvent(this.reconnectionToken, this.protocol.getMillisSinceLastIncomingData(), attempt + 1));
+ 
+@@ -748,7 +746,7 @@ export abstract class PersistentConnection extends Disposable {
+ 		this.protocol.pauseSocketWriting();
+ 	}
+ 
+-	protected abstract _reconnect(options: ISimpleConnectionOptions, timeoutCancellationToken: CancellationToken): Promise<void>;
++	protected abstract _reconnect(options: ISimpleConnectionOptions): Promise<void>;
+ }
+ 
+ export class ManagementPersistentConnection extends PersistentConnection {
+@@ -763,8 +761,8 @@ export class ManagementPersistentConnection extends PersistentConnection {
+ 		}, options.ipcLogger));
+ 	}
+ 
+-	protected async _reconnect(options: ISimpleConnectionOptions, timeoutCancellationToken: CancellationToken): Promise<void> {
+-		await doConnectRemoteAgentManagement(options, timeoutCancellationToken);
++	protected async _reconnect(options: ISimpleConnectionOptions): Promise<void> {
++		await doConnectRemoteAgentManagement(options);
+ 	}
+ }
+ 
+@@ -779,8 +777,8 @@ export class ExtensionHostPersistentConnection extends PersistentConnection {
+ 		this.debugPort = debugPort;
+ 	}
+ 
+-	protected async _reconnect(options: ISimpleConnectionOptions, timeoutCancellationToken: CancellationToken): Promise<void> {
+-		await doConnectRemoteAgentExtensionHost(options, this._startArguments, timeoutCancellationToken);
++	protected async _reconnect(options: ISimpleConnectionOptions): Promise<void> {
++		await doConnectRemoteAgentExtensionHost(options, this._startArguments);
+ 	}
+ }
+ 
+-- 
+2.54.0 (Apple Git-156)
+

@@ -1,0 +1,23 @@
+From dacb287cea39b5a24ce38e99a74c5bd65fe2c0da Mon Sep 17 00:00:00 2001
+From: James <aslan.jnn@gmail.com>
+Date: Wed, 22 May 2024 21:10:47 +1000
+Subject: Optimise automatic color scheme detection
+
+---
+ src/vs/workbench/services/themes/common/themeConfiguration.ts | 1 -
+ 1 file changed, 1 deletion(-)
+
+diff --git a/src/vs/workbench/services/themes/common/themeConfiguration.ts b/src/vs/workbench/services/themes/common/themeConfiguration.ts
+index 8d1f119ce85..89492ab470c 100644
+--- a/src/vs/workbench/services/themes/common/themeConfiguration.ts
++++ b/src/vs/workbench/services/themes/common/themeConfiguration.ts
+@@ -325,7 +325,6 @@ export class ThemeConfiguration {
+ 	}
+ 
+ 	public async setColorTheme(theme: IWorkbenchColorTheme, settingsTarget: ThemeSettingTarget): Promise<IWorkbenchColorTheme> {
+-		await this.writeConfiguration(this.getColorThemeSettingId(), theme.settingsId, settingsTarget);
+ 		return theme;
+ 	}
+ 
+-- 
+2.39.3 (Apple Git-146)

@@ -1,0 +1,21 @@
+From a2ed6b1b20090d213b240ddabb33efe732a03a4f Mon Sep 17 00:00:00 2001
+From: James <aslan.jnn@gmail.com>
+Date: Sat, 8 Jul 2023 01:54:50 +1000
+Subject: Use jamestut's custom xterm.js
+
+---
+ package.json | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/package.json b/package.json
+index 110b3ff6..f5f4148e 100644
+--- a/package.json
++++ b/package.json
+@@ -134,3 +134,3 @@
+     "@xterm/headless": "^6.1.0-beta.285",
+-    "@xterm/xterm": "^6.1.0-beta.285",
++    "@xterm/xterm": "https://github.com/jamestut-vscode/xterm.js-patches/releases/download/6.1.0-beta.285-m1s/xtermjs.tar.gz",
+     "chrome-remote-interface": "^0.33.0",
+-- 
+2.54.0 (Apple Git-156)
+

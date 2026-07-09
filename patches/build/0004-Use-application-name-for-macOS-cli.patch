@@ -1,0 +1,22 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: James <aslan.jnn@gmail.com>
+Date: Sat, 11 Apr 2026 12:00:00 +1000
+Subject: Use application name for macOS CLI
+
+---
+ build/gulpfile.vscode.ts | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/build/gulpfile.vscode.ts b/build/gulpfile.vscode.ts
+index 3f44c236..a78d0cc9 100644
+--- a/build/gulpfile.vscode.ts
++++ b/build/gulpfile.vscode.ts
+@@ -418,7 +418,7 @@ function packageTask(platform: string, arch: string, sourceFolderName: string, d
+ 			const shortcut = gulp.src('resources/darwin/bin/code.sh')
+ 				.pipe(replace('@@APPNAME@@', product.applicationName))
+ 				.pipe(replace('@@NAME@@', product.nameShort))
+-				.pipe(rename('bin/code'));
++				.pipe(rename(`bin/${product.applicationName}`));
+ 			const policyDest = gulp.src('.build/policies/darwin/**', { base: '.build/policies/darwin' })
+ 				.pipe(rename(f => f.dirname = `policies/${f.dirname}`));
+ 			all = es.merge(all, shortcut, policyDest);

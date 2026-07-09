@@ -1,0 +1,86 @@
+From 82cd7523435625f3e4ef59a6966cfba2b57a9266 Mon Sep 17 00:00:00 2001
+From: James <aslan.jnn@gmail.com>
+Date: Thu, 9 Jul 2026 14:30:10 +1000
+Subject: Disable GitHub and Microsoft authentication extensions
+
+---
+ build/gulpfile.extensions.ts | 3 ---
+ build/lib/extensions.ts      | 7 +++++--
+ build/npm/dirs.ts            | 4 ----
+ 3 files changed, 5 insertions(+), 9 deletions(-)
+
+diff --git a/build/gulpfile.extensions.ts b/build/gulpfile.extensions.ts
+index 7f765706..8c4a2d18 100644
+--- a/build/gulpfile.extensions.ts
++++ b/build/gulpfile.extensions.ts
+@@ -60,8 +60,6 @@ const compilations = [
+ 	'extensions/extension-editing/tsconfig.json',
+ 	'extensions/git/tsconfig.json',
+ 	'extensions/git-base/tsconfig.json',
+-	'extensions/github/tsconfig.json',
+-	'extensions/github-authentication/tsconfig.json',
+ 	'extensions/grunt/tsconfig.json',
+ 	'extensions/gulp/tsconfig.json',
+ 	'extensions/html-language-features/client/tsconfig.json',
+@@ -76,7 +74,6 @@ const compilations = [
+ 	'extensions/merge-conflict/tsconfig.json',
+ 	'extensions/mermaid-markdown-features/tsconfig.json',
+ 	'extensions/terminal-suggest/tsconfig.json',
+-	'extensions/microsoft-authentication/tsconfig.json',
+ 	'extensions/notebook-renderers/tsconfig.json',
+ 	'extensions/npm/tsconfig.json',
+ 	'extensions/php-language-features/tsconfig.json',
+diff --git a/build/lib/extensions.ts b/build/lib/extensions.ts
+index e487ff5c..2e40b229 100644
+--- a/build/lib/extensions.ts
++++ b/build/lib/extensions.ts
+@@ -303,12 +303,15 @@ export function fromGithub({ name, version, repo, sha256, metadata }: IExtension
+  * platform that is being built.
+  */
+ const nativeExtensions = [
+-	'git',
+-	'microsoft-authentication',
++	'git'
+ ];
+ 
+ const excludedExtensions = [
+ 	'copilot',
++	'copilot-chat',
++	'github',
++	'github-authentication',
++	'microsoft-authentication',
+ 	'vscode-api-tests',
+ 	'vscode-colorize-tests',
+ 	'vscode-colorize-perf-tests',
+diff --git a/build/npm/dirs.ts b/build/npm/dirs.ts
+index a148c8e3..5e51a0ac 100644
+--- a/build/npm/dirs.ts
++++ b/build/npm/dirs.ts
+@@ -15,7 +15,6 @@ export const dirs = [
+ 	'build/vite',
+ 	'extensions',
+ 	'extensions/configuration-editing',
+-	'extensions/copilot',
+ 	'extensions/css-language-features',
+ 	'extensions/css-language-features/server',
+ 	'extensions/debug-auto-launch',
+@@ -24,8 +23,6 @@ export const dirs = [
+ 	'extensions/extension-editing',
+ 	'extensions/git',
+ 	'extensions/git-base',
+-	'extensions/github',
+-	'extensions/github-authentication',
+ 	'extensions/grunt',
+ 	'extensions/gulp',
+ 	'extensions/html-language-features',
+@@ -39,7 +36,6 @@ export const dirs = [
+ 	'extensions/media-preview',
+ 	'extensions/merge-conflict',
+ 	'extensions/mermaid-markdown-features',
+-	'extensions/microsoft-authentication',
+ 	'extensions/notebook-renderers',
+ 	'extensions/npm',
+ 	'extensions/php-language-features',
+-- 
+2.54.0 (Apple Git-156)
+

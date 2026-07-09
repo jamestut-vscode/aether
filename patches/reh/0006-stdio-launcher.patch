@@ -1,0 +1,323 @@
+From f2d97a0c522e07c4a261eab4c51124ab87612d3c Mon Sep 17 00:00:00 2001
+From: James <aslan.jnn@gmail.com>
+Date: Sun, 14 Feb 2026 14:00:00 +1100
+Subject: Add proxy launcher for stdio transport method
+
+---
+
+diff --git a/build/gulpfile.reh.ts b/build/gulpfile.reh.ts
+index d25f48054a6..7b09fbd3c1f 100644
+--- a/build/gulpfile.reh.ts
++++ b/build/gulpfile.reh.ts
+@@ -135,7 +135,8 @@ const serverWithWebEntryPoints = [
+ const bootstrapEntryPoints = [
+ 	'out-build/server-main.js',
+ 	'out-build/server-cli.js',
+-	'out-build/bootstrap-fork.js'
++	'out-build/bootstrap-fork.js',
++	'out-build/server-launcher-main.js'
+ ];
+ 
+ function getNodeVersion() {
+@@ -402,6 +403,9 @@ function packageTask(type: string, platform: string, arch: string, sourceFolderN
+ 					.pipe(util.setExecutableBit()),
+ 				gulp.src(`resources/server/bin/${platform === 'darwin' ? 'code-server-darwin.sh' : 'code-server-linux.sh'}`, { base: '.' })
+ 					.pipe(rename(`bin/${product.serverApplicationName}`))
++					.pipe(util.setExecutableBit()),
++				gulp.src(`resources/server/bin/code-server-launcher.sh`, { base: '.' })
++					.pipe(rename(`bin/launcher`))
+ 					.pipe(util.setExecutableBit())
+ 			);
+ 		}
+diff --git a/resources/server/bin/code-server-launcher.sh b/resources/server/bin/code-server-launcher.sh
+new file mode 100644
+index 00000000000..a20e4029114
+--- /dev/null
++++ b/resources/server/bin/code-server-launcher.sh
+@@ -0,0 +1,4 @@
++#!/usr/bin/env sh
++ROOT="$(dirname "$(dirname "$(readlink -f "$0")")")"
++cd "$ROOT" || exit 1
++./node ${INSPECT:-} "out/server-launcher-main.js" "$@"
+diff --git a/src/server-launcher-main.ts b/src/server-launcher-main.ts
+new file mode 100644
+index 00000000000..0b0b77aad4e
+--- /dev/null
++++ b/src/server-launcher-main.ts
+@@ -0,0 +1,274 @@
++import * as fs from 'fs';
++import * as path from 'path';
++import * as os from 'os';
++import * as net from 'net';
++import { fileURLToPath } from 'url';
++import * as child_process from 'child_process';
++
++const __filename = fileURLToPath(import.meta.url);
++const __dirname = path.dirname(__filename);
++
++const programArgs = process.argv.slice(2);
++
++const DEFAULT_SHUTDOWN_TIMEOUT = 30;
++
++let serverDataFolderName: string;
++let remoteDataDir: string;
++let socketPath: string;
++
++class ArgumentParser {
++	private options: Map<string, { type: 'value' | 'store_true', value?: string }> = new Map();
++	private parsed: Map<string, string> = new Map();
++	public remainingArgs: string[] = [];
++
++	addArgument(name: string, options: { action: 'store_true' | 'value' }): void {
++		this.options.set(name, { type: options.action });
++	}
++
++	parseArgs(args: string[] = programArgs) {
++		this.parsed.clear();
++		this.remainingArgs.length = 0;
++
++		for (let i = 0; i < args.length; i++) {
++			const arg = args[i];
++
++			const option = this.options.get(arg);
++			if (option !== undefined) {
++				if (option.type === 'store_true') {
++					this.parsed.set(arg, '');
++				} else if (option.type === 'value') {
++					if (i + 1 < args.length) {
++						this.parsed.set(arg, args[i + 1]);
++						i++;
++					} else {
++						throw new Error(`Option ${arg} requires a value`);
++					}
++				}
++			} else {
++				this.remainingArgs.push(arg);
++			}
++		}
++	}
++
++	get(name: string): string | undefined {
++		return this.parsed.get(name);
++	}
++
++	has(name: string): boolean {
++		return this.parsed.has(name);
++	}
++}
++
++const ap = new ArgumentParser();
++ap.addArgument('--daemon', { action: 'store_true' });
++ap.addArgument('--help', { action: 'store_true' });
++ap.addArgument('--server-data-dir', { action: 'value' });
++ap.addArgument('--socket-path', { action: 'value' });
++ap.addArgument('--remote-auto-shutdown-timeout', { action: 'value' });
++// block user from passing these arguments
++ap.addArgument('--daemonize', { action: 'store_true' });
++ap.parseArgs();
++
++function ensureDirectoryExists(dirPath: string): void {
++	try {
++		fs.mkdirSync(dirPath, { recursive: true });
++	} catch (error: any) {
++		if (error.code !== 'EEXIST') {
++			throw error;
++		}
++	}
++}
++
++function resolveAbsolutePath(
++	userValue: string | undefined,
++	argumentName: string
++): string | undefined {
++	if (userValue === undefined) {
++		return undefined;
++	}
++	if (!path.isAbsolute(userValue)) {
++		console.error(`Error: ${argumentName} must be an absolute path`);
++		process.exit(1);
++	}
++	return path.resolve(userValue);
++}
++
++function isSocketInUse(socketPath: string): Promise<boolean> {
++	return new Promise<boolean>((resolve) => {
++		const client = net.createConnection(socketPath);
++
++		client.on('connect', () => {
++			client.destroy();
++			resolve(true);
++		});
++
++		client.on('error', () => {
++			resolve(false);
++		});
++	});
++}
++
++async function connectToExistingInstance(childToWait?: child_process.ChildProcess): Promise<void> {
++	const tryConnect = (): Promise<void> => {
++		return new Promise<void>((resolve, reject) => {
++			const client = net.createConnection(socketPath);
++
++			client.on('connect', () => {
++				process.stdin.pipe(client);
++				client.pipe(process.stdout);
++
++				process.stdin.on('end', () => {
++					client.end();
++				});
++
++				client.on('end', () => {
++					resolve();
++				});
++			});
++
++			client.on('error', (error) => {
++				reject(error);
++			});
++		});
++	};
++
++	if (childToWait === undefined) {
++		return tryConnect();
++	}
++
++	// Wait mode: retry every 100ms until successful or the specified child process dies
++	while (true) {
++		try {
++			return await tryConnect();
++		} catch (error) {
++			// Check again if daemon process has died before waiting
++			if (childToWait.exitCode !== null || childToWait.killed) {
++				throw new Error('Child process has stopped, stopping connection attempts');
++			}
++			await new Promise(resolve => setTimeout(resolve, 100));
++		}
++	}
++}
++
++function createDaemonProcess() {
++	const child = child_process.fork(__filename, ['--daemon', ...programArgs], {
++		detached: true,
++		stdio: 'ignore',
++	});
++	return child;
++}
++
++function showHelp(): void {
++	console.log('Usage: server-launcher [options] [server-args...]');
++	console.log('');
++	console.log('Options:');
++	console.log('  --daemon');
++	console.log('    Run in daemon mode');
++	console.log('  --help');
++	console.log('    Show this help message');
++	console.log('  --server-data-dir DIR');
++	console.log(`    Set remote server's data directory (default: ~/${serverDataFolderName})`);
++	console.log('  --socket-path PATH');
++	console.log('    Set socket path (default: <server-data-dir>/vscode-server.sock)');
++	console.log('  --remote-auto-shutdown-timeout SEC');
++	console.log(`    Set server auto shutdown timeout (default: ${DEFAULT_SHUTDOWN_TIMEOUT} seconds)`);
++	console.log('');
++	console.log('All other arguments will be passed to the VS Code server, except for --user-data-dir, --extensions-dir, and --daemonize.');
++}
++
++function cleanupSocketFile() {
++	try {
++		fs.unlinkSync(socketPath);
++	} catch (error) { /* Ignore cleanup errors */ }
++}
++
++function runDaemon(): void {
++	let daemonChild: child_process.ChildProcess | null = null;
++
++	function cleanup() {
++		if (daemonChild) {
++			daemonChild.kill('SIGTERM');
++			daemonChild = null;
++		}
++		cleanupSocketFile();
++		process.exit(0);
++	}
++
++	process.on('SIGINT', cleanup);
++	process.on('SIGQUIT', cleanup);
++	process.on('SIGTERM', cleanup);
++
++	// Ignore SIGHUP to make daemon immune to terminal hangup
++	process.on('SIGHUP', () => { });
++
++	const autoShutdownTimeout = ap.get('--remote-auto-shutdown-timeout') ?? DEFAULT_SHUTDOWN_TIMEOUT.toString();
++	const serverArgs: string[] = [
++		'--server-data-dir', remoteDataDir,
++		'--socket-path', socketPath,
++		'--remote-auto-shutdown-timeout', autoShutdownTimeout
++	];
++	serverArgs.concat(ap.remainingArgs);
++
++	// Start the actual server process
++	daemonChild = child_process.fork(`${__dirname}/server-main.js`, serverArgs, {
++		stdio: 'ignore',
++		detached: false
++	});
++}
++
++async function main(): Promise<void> {
++	// read default serverDataFolderName (for help)
++	const productJsonPath = path.join(__dirname, '..', 'product.json');
++	const productJsonContent = JSON.parse(fs.readFileSync(productJsonPath, 'utf8'));
++	serverDataFolderName = productJsonContent.serverDataFolderName;
++
++	if (ap.has('--help')) {
++		showHelp();
++		process.exit(0);
++	}
++
++	// populate remote data dir
++	const userRemoteDataDir = resolveAbsolutePath(ap.get('--server-data-dir'), '--server-data-dir');
++	remoteDataDir = userRemoteDataDir ?? path.resolve(os.homedir(), serverDataFolderName);
++
++	// also socket directory
++	const userSocketPath = resolveAbsolutePath(ap.get('--socket-path'), '--socket-path');
++	socketPath = userSocketPath ?? path.resolve(remoteDataDir, 'vscode-server.sock');
++
++	// run in daemon mode if needed
++	if (ap.has('--daemon')) {
++		runDaemon();
++		return;
++	}
++
++	ensureDirectoryExists(remoteDataDir);
++
++	if (await isSocketInUse(socketPath)) {
++		// Connect to existing instance
++		try {
++			await connectToExistingInstance();
++			return;
++		} catch (error) {
++			console.error('Failed to connect to existing instance:', error);
++			process.exit(1);
++		}
++	} else {
++		// if we're here, we know that the socket doesn't have an "owner"
++		// try remove the old socket so that the child VSCode server doesn't end up
++		// with EADDRINUSE
++		cleanupSocketFile();
++
++		// Continue with daemon creation
++		const serverProcess = createDaemonProcess();
++		// then attempt to connect to the newly created instance
++		await connectToExistingInstance(serverProcess);
++		// current session finished: detach from child and keep it running
++		serverProcess.channel?.unref();
++		serverProcess.unref();
++	}
++}
++
++main().catch((error) => {
++	console.error('Error:', error);
++	process.exit(1);
++});
+-- 
+2.39.5 (Apple Git-154)

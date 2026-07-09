@@ -1,0 +1,93 @@
+From 92062684e1d35ce0e7c6217b4b0e4393662feb45 Mon Sep 17 00:00:00 2001
+From: James <aslan.jnn@gmail.com>
+Date: Sat, 11 Apr 2026 12:00:00 +1000
+Subject: Configurable timeout for remote auto shutdown
+
+---
+ src/vs/server/node/serverEnvironmentService.ts |  4 ++--
+ src/vs/server/node/serverLifetimeService.ts    | 10 ++++------
+ src/vs/server/node/serverServices.ts           |  2 +-
+ 3 files changed, 7 insertions(+), 9 deletions(-)
+
+diff --git a/src/vs/server/node/serverEnvironmentService.ts b/src/vs/server/node/serverEnvironmentService.ts
+index 7228d092..0442b7c4 100644
+--- a/src/vs/server/node/serverEnvironmentService.ts
++++ b/src/vs/server/node/serverEnvironmentService.ts
+@@ -82,7 +82,7 @@ export const serverOptions: OptionDescriptions<Required<ServerParsedArgs>> = {
+ 
+ 	/* ----- remote development options ----- */
+ 
+-	'enable-remote-auto-shutdown': { type: 'boolean' },
++	'remote-auto-shutdown-timeout': { type: 'string' },
+ 	'remote-auto-shutdown-without-delay': { type: 'boolean' },
+ 	'inspect-ptyhost': { type: 'string', allowEmptyValue: true },
+ 
+@@ -217,7 +217,7 @@ export interface ServerParsedArgs {
+ 
+ 	/* ----- remote development options ----- */
+ 
+-	'enable-remote-auto-shutdown'?: boolean;
++	'remote-auto-shutdown-timeout'?: string;
+ 	'remote-auto-shutdown-without-delay'?: boolean;
+ 	'inspect-ptyhost'?: string;
+ 
+diff --git a/src/vs/server/node/serverLifetimeService.ts b/src/vs/server/node/serverLifetimeService.ts
+index 397c3eed..ba87065d 100644
+--- a/src/vs/server/node/serverLifetimeService.ts
++++ b/src/vs/server/node/serverLifetimeService.ts
+@@ -9,12 +9,10 @@ import { ILogService } from '../../platform/log/common/log.js';
+ 
+ export const IServerLifetimeService = createDecorator<IServerLifetimeService>('serverLifetimeService');
+ 
+-export const SHUTDOWN_TIMEOUT = 5 * 60 * 1000;
+-
+ /** Options controlling the auto-shutdown behaviour. */
+ export interface IServerLifetimeOptions {
+ 	/** When `false` (default), the server never auto-shuts down. */
+-	readonly enableAutoShutdown?: boolean;
++	readonly autoShutdownTimeout?: number;
+ 	/** When `true`, skip the 5-minute grace period on non-initial shutdowns. */
+ 	readonly shutdownWithoutDelay?: boolean;
+ }
+@@ -57,7 +55,7 @@ export class ServerLifetimeService extends Disposable implements IServerLifetime
+ 	) {
+ 		super();
+ 
+-		if (this._options.enableAutoShutdown) {
++		if (this._options.autoShutdownTimeout) {
+ 			// Start initial shutdown timer (no clients connected yet)
+ 			this._scheduleShutdown(true);
+ 		}
+@@ -98,7 +96,7 @@ export class ServerLifetimeService extends Disposable implements IServerLifetime
+ 
+ 			this._logService.debug(`ServerLifetime: consumer '${consumer}' inactive (total: ${this._totalCount})`);
+ 
+-			if (this._totalCount === 0 && this._options.enableAutoShutdown) {
++			if (this._totalCount === 0 && this._options.autoShutdownTimeout) {
+ 				this._scheduleShutdown(false);
+ 			}
+ 		});
+@@ -120,7 +118,7 @@ export class ServerLifetimeService extends Disposable implements IServerLifetime
+ 			this._shutdownTimer = setTimeout(() => {
+ 				this._shutdownTimer = undefined;
+ 				this._tryShutdown();
+-			}, SHUTDOWN_TIMEOUT);
++			}, this._options.autoShutdownTimeout! * 1000);
+ 		}
+ 	}
+ 
+diff --git a/src/vs/server/node/serverServices.ts b/src/vs/server/node/serverServices.ts
+index e8fc3214..aadce0c0 100644
+--- a/src/vs/server/node/serverServices.ts
++++ b/src/vs/server/node/serverServices.ts
+@@ -234,7 +234,7 @@ export async function setupServerServices(connectionToken: ServerConnectionToken
+ 	services.set(IPtyService, ptyHostService);
+ 
+ 	const serverLifetimeService = instantiationService.createInstance(ServerLifetimeService, {
+-		enableAutoShutdown: !!args['enable-remote-auto-shutdown'],
++		autoShutdownTimeout: args['remote-auto-shutdown-timeout'] !== undefined ? parseInt(args['remote-auto-shutdown-timeout']) : undefined,
+ 		shutdownWithoutDelay: !!args['remote-auto-shutdown-without-delay'],
+ 	});
+ 	services.set(IServerLifetimeService, serverLifetimeService);
+-- 
+2.50.1 (Apple Git-155)

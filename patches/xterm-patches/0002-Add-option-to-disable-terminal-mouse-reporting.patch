@@ -1,0 +1,75 @@
+From 64d238fcbfe70c28d3521be236fb9170e9ce5531 Mon Sep 17 00:00:00 2001
+From: James <aslan.jnn@gmail.com>
+Date: Thu, 23 Mar 2023 22:40:59 +1100
+Subject: Add option to disable terminal mouse reporting
+
+---
+ src/vs/platform/terminal/common/terminal.ts                  | 1 +
+ .../contrib/terminal/browser/xterm/xtermTerminal.ts          | 2 ++
+ src/vs/workbench/contrib/terminal/common/terminal.ts         | 1 +
+ .../contrib/terminal/common/terminalConfiguration.ts         | 5 +++++
+ 4 files changed, 9 insertions(+)
+
+diff --git a/src/vs/platform/terminal/common/terminal.ts b/src/vs/platform/terminal/common/terminal.ts
+index 0238d70e..c407d4ae 100644
+--- a/src/vs/platform/terminal/common/terminal.ts
++++ b/src/vs/platform/terminal/common/terminal.ts
+@@ -50,6 +50,7 @@ export const enum TerminalSettingId {
+ 	TabsLocation = 'terminal.integrated.tabs.location',
+ 	TabsFocusMode = 'terminal.integrated.tabs.focusMode',
+ 	TabsAllowAgentCliTitle = 'terminal.integrated.tabs.allowAgentCliTitle',
++	AllowMouseReporting = 'terminal.integrated.allowMouseReporting',
+ 	MacOptionIsMeta = 'terminal.integrated.macOptionIsMeta',
+ 	MacOptionClickForcesSelection = 'terminal.integrated.macOptionClickForcesSelection',
+ 	AltClickMovesCursor = 'terminal.integrated.altClickMovesCursor',
+diff --git a/src/vs/workbench/contrib/terminal/browser/xterm/xtermTerminal.ts b/src/vs/workbench/contrib/terminal/browser/xterm/xtermTerminal.ts
+index dc89e65c..aea2bf3e 100644
+--- a/src/vs/workbench/contrib/terminal/browser/xterm/xtermTerminal.ts
++++ b/src/vs/workbench/contrib/terminal/browser/xterm/xtermTerminal.ts
+@@ -248,6 +248,7 @@ export class XtermTerminal extends Disposable implements IXtermTerminal, IDetach
+ 			cursorInactiveStyle: vscodeToXtermCursorStyle(config.cursorStyleInactive),
+ 			cursorWidth: config.cursorWidth,
+ 			macOptionIsMeta: config.macOptionIsMeta,
++			allowMouseReporting: config.allowMouseReporting,
+ 			macOptionClickForcesSelection: config.macOptionClickForcesSelection,
+ 			rightClickSelectsWord: config.rightClickBehavior === 'selectWord',
+ 			fastScrollSensitivity: config.fastScrollSensitivity,
+@@ -563,6 +564,7 @@ export class XtermTerminal extends Disposable implements IXtermTerminal, IDetach
+ 		this.raw.options.fastScrollSensitivity = config.fastScrollSensitivity;
+ 		this.raw.options.scrollSensitivity = config.mouseWheelScrollSensitivity;
+ 		this.raw.options.macOptionIsMeta = config.macOptionIsMeta;
++		this.raw.options.allowMouseReporting = config.allowMouseReporting;
+ 		const editorOptions = this._configurationService.getValue<IEditorOptions>('editor');
+ 		this.raw.options.altClickMovesCursor = config.altClickMovesCursor && editorOptions.multiCursorModifier === 'alt';
+ 		this.raw.options.macOptionClickForcesSelection = config.macOptionClickForcesSelection;
+diff --git a/src/vs/workbench/contrib/terminal/common/terminal.ts b/src/vs/workbench/contrib/terminal/common/terminal.ts
+index f1bcb84e..2cbb5245 100644
+--- a/src/vs/workbench/contrib/terminal/common/terminal.ts
++++ b/src/vs/workbench/contrib/terminal/common/terminal.ts
+@@ -144,6 +144,7 @@ export interface ITerminalConfiguration {
+ 	useWslProfiles: boolean;
+ 	altClickMovesCursor: boolean;
+ 	macOptionIsMeta: boolean;
++	allowMouseReporting: boolean;
+ 	macOptionClickForcesSelection: boolean;
+ 	gpuAcceleration: 'auto' | 'on' | 'off';
+ 	rightClickBehavior: 'default' | 'copyPaste' | 'paste' | 'selectWord' | 'nothing';
+diff --git a/src/vs/workbench/contrib/terminal/common/terminalConfiguration.ts b/src/vs/workbench/contrib/terminal/common/terminalConfiguration.ts
+index e08464a3..0561f513 100644
+--- a/src/vs/workbench/contrib/terminal/common/terminalConfiguration.ts
++++ b/src/vs/workbench/contrib/terminal/common/terminalConfiguration.ts
+@@ -146,6 +146,11 @@ const terminalConfiguration: IStringDictionary<IConfigurationPropertySchema> = {
+ 		type: 'boolean',
+ 		default: false
+ 	},
++	[TerminalSettingId.AllowMouseReporting]: {
++		description: localize('terminal.integrated.allowMouseReporting', "Controls whether to report mouse activities to the terminal app."),
++		type: 'boolean',
++		default: false
++	},
+ 	[TerminalSettingId.MacOptionClickForcesSelection]: {
+ 		description: localize('terminal.integrated.macOptionClickForcesSelection', "Controls whether to force selection when using Option+click on macOS. This will force a regular (line) selection and disallow the use of column selection mode. This enables copying and pasting using the regular terminal selection, for example, when mouse mode is enabled in tmux."),
+ 		type: 'boolean',
+-- 
+2.54.0 (Apple Git-156)
+

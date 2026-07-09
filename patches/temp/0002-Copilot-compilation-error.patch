@@ -1,0 +1,25 @@
+From f68e271a6f400c909b2272f9715bd5bf1c8f2d9f Mon Sep 17 00:00:00 2001
+From: James <aslan.jnn@gmail.com>
+Date: Thu, 9 Jul 2026 14:31:00 +1000
+Subject: Fix compilation error
+
+---
+ src/vs/platform/agentHost/node/copilot/copilotSessionWrapper.ts | 2 +-
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+
+diff --git a/src/vs/platform/agentHost/node/copilot/copilotSessionWrapper.ts b/src/vs/platform/agentHost/node/copilot/copilotSessionWrapper.ts
+index a9240fb2..14c01ad2 100644
+--- a/src/vs/platform/agentHost/node/copilot/copilotSessionWrapper.ts
++++ b/src/vs/platform/agentHost/node/copilot/copilotSessionWrapper.ts
+@@ -16,7 +16,7 @@ export class CopilotSessionWrapper extends Disposable {
+ 
+ 	private readonly _handledEventTypes = new Set<SessionEventType>();
+ 	private readonly _onUnhandledEvent = this._register(new Emitter<SessionEvent>());
+-	readonly onUnhandledEvent = this._onUnhandledEvent.event;
++	readonly onUnhandledEvent: Event<SessionEvent> = this._onUnhandledEvent.event;
+ 
+ 	constructor(readonly session: CopilotSession) {
+ 		super();
+-- 
+2.54.0 (Apple Git-156)
+

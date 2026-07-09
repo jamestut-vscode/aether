@@ -1,0 +1,48 @@
+From c880f823900a03da31d1f4d3b14e16beb37ba5e7 Mon Sep 17 00:00:00 2001
+From: James <aslan.jnn@gmail.com>
+Date: Sat, 11 Apr 2026 12:00:00 +1000
+Subject: Fix reload on workspace change
+
+---
+ .../workspaceEditingService.ts                 | 18 +++++++-----------
+ 1 file changed, 7 insertions(+), 11 deletions(-)
+
+diff --git a/src/vs/workbench/services/workspaces/electron-browser/workspaceEditingService.ts b/src/vs/workbench/services/workspaces/electron-browser/workspaceEditingService.ts
+index 1ed42eca..6edd076f 100644
+--- a/src/vs/workbench/services/workspaces/electron-browser/workspaceEditingService.ts
++++ b/src/vs/workbench/services/workspaces/electron-browser/workspaceEditingService.ts
+@@ -176,11 +176,6 @@ export class NativeWorkspaceEditingService extends AbstractWorkspaceEditingServi
+ 	}
+ 
+ 	async enterWorkspace(workspaceUri: URI): Promise<void> {
+-		const stopped = await this.extensionService.stopExtensionHosts(localize('restartExtensionHost.reason', "Opening a multi-root workspace"));
+-		if (!stopped) {
+-			return;
+-		}
+-
+ 		const oldWorkspace = toWorkspaceIdentifier(this.contextService.getWorkspace());
+ 		const result = await this.doEnterWorkspace(workspaceUri);
+ 		if (result) {
+@@ -201,12 +196,13 @@ export class NativeWorkspaceEditingService extends AbstractWorkspaceEditingServi
+ 		// TODO@aeschli: workaround until restarting works
+ 		if (this.environmentService.remoteAuthority) {
+ 			this.hostService.reload();
+-		}
+-
+-		// Restart the extension host: entering a workspace means a new location for
+-		// storage and potentially a change in the workspace.rootPath property.
+-		else {
+-			this.extensionService.startExtensionHosts();
++		} else {
++			const stopped = await this.extensionService.stopExtensionHosts(localize('restartExtensionHost.reason', "Opening a multi-root workspace."));
++			if (stopped) {
++				// Restart the extension host: entering a workspace means a new location for
++				// storage and potentially a change in the workspace.rootPath property.
++				this.extensionService.startExtensionHosts();
++			}
+ 		}
+ 	}
+ }
+-- 
+2.50.1 (Apple Git-155)
+

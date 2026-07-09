@@ -1,0 +1,26 @@
+From f6d77f09efdf46f0c8abe71f39bfa52dba75304d Mon Sep 17 00:00:00 2001
+From: James <aslan.jnn@gmail.com>
+Date: Thu, 9 Jul 2026 12:32:49 +1000
+Subject: Restore hardcoded Electron version (temporary)
+
+---
+ build/lib/electron.ts | 3 +--
+ 1 file changed, 1 insertion(+), 2 deletions(-)
+
+diff --git a/build/lib/electron.ts b/build/lib/electron.ts
+index e229b875..f9236eaf 100644
+--- a/build/lib/electron.ts
++++ b/build/lib/electron.ts
+@@ -102,8 +102,7 @@ function darwinBundleDocumentTypes(types: { [name: string]: string | string[] },
+ 	});
+ }
+ 
+-const { msBuildId } = util.getElectronVersion();
+-export const electronVersion = '42.2.0';
++const { electronVersion, msBuildId } = util.getElectronVersion();
+ 
+ // In product builds, `@vscode/gulp-electron` is given an asset resolver (via the
+ // `repo` option) that fetches the prebuilt Electron archives on demand from the
+-- 
+2.54.0 (Apple Git-156)
+

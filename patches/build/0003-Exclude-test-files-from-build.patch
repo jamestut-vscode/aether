@@ -1,0 +1,36 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: James <aslan.jnn@gmail.com>
+Date: Sat, 11 Jul 2026 16:58:38 +1000
+Subject: Exclude test files from build
+
+---
+ build/lib/compilation.ts | 3 ++-
+ src/tsconfig.json        | 3 ++-
+ 2 files changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/build/lib/compilation.ts b/build/lib/compilation.ts
+index 32e3e25e..af74c6c7 100644
+--- a/build/lib/compilation.ts
++++ b/build/lib/compilation.ts
+@@ -133,3 +133,4 @@ export function compileTask(src: string, out: string, build: boolean, options: {
+ 		const compile = createCompile(src, { build, emitError: true, transpileOnly: build ? false : { esbuild: true }, preserveEnglish: !!options.preserveEnglish });
+-		const srcPipe = gulp.src(`${src}/**`, { base: `${src}` });
++		const srcPipe = gulp.src(`${src}/**`, { base: `${src}` })
++			.pipe(util.filter((f: File) => !/\/test\//.test(f.path)));
+ 		const generator = new MonacoGenerator(false);
+diff --git a/src/tsconfig.json b/src/tsconfig.json
+index 815c7bfe..e8b4263c 100644
+--- a/src/tsconfig.json
++++ b/src/tsconfig.json
+@@ -34,6 +34,7 @@
+ 		"./vscode-dts/vscode.d.ts"
+ 	],
+ 	"exclude": [
+-		"vs/workbench/contrib/webview/browser/pre/service-worker.js"
++		"vs/workbench/contrib/webview/browser/pre/service-worker.js",
++		"vs/**/test/**"
+ 	]
+ }
+-- 
+2.54.0 (Apple Git-156)
+

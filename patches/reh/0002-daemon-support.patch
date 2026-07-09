@@ -1,0 +1,69 @@
+From a841eaca33a5f3305261a9c05f9c0fc001409e86 Mon Sep 17 00:00:00 2001
+From: James <aslan.jnn@gmail.com>
+Date: Wed, 8 Jul 2026 18:25:00 +1000
+Subject: daemon support
+
+---
+ src/server-main.ts                             | 14 +++++++++++++-
+ src/vs/server/node/serverEnvironmentService.ts |  3 +++
+ 2 files changed, 16 insertions(+), 1 deletion(-)
+
+diff --git a/src/server-main.ts b/src/server-main.ts
+index 08593e46..afda2a54 100644
+--- a/src/server-main.ts
++++ b/src/server-main.ts
+@@ -10,6 +10,7 @@ import * as http from 'node:http';
+ import type { AddressInfo } from 'node:net';
+ import * as os from 'node:os';
+ import * as readline from 'node:readline';
++import * as cp from 'node:child_process';
+ import { performance } from 'node:perf_hooks';
+ import minimist from 'minimist';
+ import { devInjectNodeModuleLookupPath, removeGlobalNodeJsModuleLookupPaths } from './bootstrap-node.js';
+@@ -25,10 +26,21 @@ perf.mark('code/server/start');
+ 
+ // Do a quick parse to determine if a server or the cli needs to be started
+ const parsedArgs = minimist(process.argv.slice(2), {
+-	boolean: ['start-server', 'list-extensions', 'print-ip-address', 'help', 'version', 'accept-server-license-terms', 'update-extensions'],
++	boolean: ['start-server', 'list-extensions', 'print-ip-address', 'help', 'version', 'accept-server-license-terms', 'update-extensions', 'daemonize'],
+ 	string: ['install-extension', 'install-builtin-extension', 'uninstall-extension', 'locate-extension', 'socket-path', 'host', 'port', 'compatibility', 'agent-host-port', 'agent-host-path'],
+ 	alias: { help: 'h', version: 'v' }
+ });
++
++if (parsedArgs.daemonize) {
++	const newArgv = process.argv.slice();
++	newArgv.splice(0, 1);
++	newArgv.splice(newArgv.indexOf('--daemonize'), 1);
++	const proc = cp.spawn(process.execPath, newArgv, { stdio: 'ignore', detached: true });
++	console.log(`PID of server daemon is ${proc.pid}`);
++	proc.unref();
++	process.exit(0);
++}
++
+ ['host', 'port', 'accept-server-license-terms'].forEach(e => {
+ 	if (!parsedArgs[e]) {
+ 		const envValue = process.env[`VSCODE_SERVER_${e.toUpperCase().replace('-', '_')}`];
+diff --git a/src/vs/server/node/serverEnvironmentService.ts b/src/vs/server/node/serverEnvironmentService.ts
+index 4407fcb6..88afb969 100644
+--- a/src/vs/server/node/serverEnvironmentService.ts
++++ b/src/vs/server/node/serverEnvironmentService.ts
+@@ -29,6 +29,7 @@ export const serverOptions: OptionDescriptions<Required<ServerParsedArgs>> = {
+ 	'disable-websocket-compression': { type: 'boolean' },
+ 	'print-startup-performance': { type: 'boolean' },
+ 	'print-ip-address': { type: 'boolean' },
++	'daemonize': { type: 'boolean', cat: 'o', description: nls.localize('daemonize', 'Fork and run in the background as a daemon.') },
+ 	'accept-server-license-terms': { type: 'boolean', cat: 'o', description: nls.localize('acceptLicenseTerms', "If set, the user accepts the server license terms and the server will be started without a user prompt.") },
+ 	'server-data-dir': { type: 'string', cat: 'o', description: nls.localize('serverDataDir', "Specifies the directory that server data is kept in.") },
+ 	'telemetry-level': { type: 'string', cat: 'o', args: 'level', description: nls.localize('telemetry-level', "Sets the initial telemetry level. Valid levels are: 'off', 'crash', 'error' and 'all'. If not specified, the server will send telemetry until a client connects, it will then use the clients telemetry setting. Setting this to 'off' is equivalent to --disable-telemetry") },
+@@ -156,6 +157,8 @@ export interface ServerParsedArgs {
+ 	'print-startup-performance'?: boolean;
+ 	'print-ip-address'?: boolean;
+ 
++	'daemonize'?: boolean;
++
+ 	'accept-server-license-terms': boolean;
+ 
+ 	'server-data-dir'?: string;
+-- 
+2.54.0 (Apple Git-156)
+
