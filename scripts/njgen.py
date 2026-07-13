@@ -4,7 +4,6 @@ import sys
 import os
 from os import path
 import json
-import multiprocessing
 import subprocess
 from typing import Dict, List, Union, Optional
 from ninja_syntax import Writer as NinjaWriter
@@ -40,7 +39,7 @@ def main():
     PRIMARY_TARGET = ('darwin', 'arm64')
 
     ap = argparse.ArgumentParser(
-        description="Generate a Ninja build file to work/packaging for creating .zip archives of VSCode. "
+        description="Generate a Ninja build file to work/packaging for building VSCode app and REH packages. "
         "The resulting work/packaging directory is ephemeral and must be deleted when attempting to package a new version.")
     ap.add_argument("--signcertname",
         help="Keychain certificate name for signing macOS app bundle.")
@@ -57,7 +56,6 @@ def main():
         wr = NinjaWriter(f)
 
         # variables
-        wr.variable("cpucount", str(multiprocessing.cpu_count()))
         wr.variable("vscodedir", VSCODEDIR_REL)
         wr.variable("workdir", WORKDIR_REL)
         wr.newline()
@@ -67,11 +65,6 @@ def main():
             "gulp",
             'cd $vscodedir && if ! [[ -z "$rimraf" ]]; then rm -rf "$rimraf"; fi && npm run gulp $gulptarget && if ! [[ -z "$touchtarget" ]]; then find "$touchtarget" -exec touch {} +; fi',
             description="gulp $gulptarget"
-        )
-        wr.rule(
-            "archive",
-            'rm -rf $out; tar --uid 0 -C "$cwd" --gid 0 -cJ -f $out "$input"',
-            description="archive $out"
         )
         wr.rule(
             "darwinsign",
@@ -140,7 +133,7 @@ def main():
                 touchtarget=primary_package,
                 implicit=primary_package_impl_dep)
             # macOS app bundle sign
-            archive_implicit_dep = [primary_package]
+            default_target = primary_package
             if not reh and PRIMARY_TARGET[0] == 'darwin':
                 if args.signcertname:
                     app_bundle_path = path.join(primary_package, f"{product_info['nameLong']}.app")
@@ -152,23 +145,14 @@ def main():
                             "appbundle": app_bundle_path
                         }
                     )
-                    archive_implicit_dep.append(app_bundle_sign_target)
+                    default_target = app_bundle_sign_target
                 else:
-                    # The archive will depend on self_sign_target, which in turn depends on primary_package.
-                    # This makes primary_package a transitive dependency of the archive.
-                    archive_implicit_dep.remove(primary_package)
-                    # copy the self-signing script, making it depend on the package
                     self_sign_target = path.join(primary_package, DARWIN_SELF_SIGN_SCRIPT)
                     wr.build(self_sign_target, "copyfile",
                         implicit=[primary_package],
                         variables={"source": path.join(BASEDIR, "scripts", DARWIN_SELF_SIGN_SCRIPT)})
-                    archive_implicit_dep.append(self_sign_target)
-            primary_archive = os.path.basename(f'{primary_package}.tar.xz')
-            wr.build(primary_archive, "archive", implicit=archive_implicit_dep, variables={
-                "cwd": os.path.dirname(primary_package),
-                "input": os.path.basename(primary_package),
-            })
-            wr.default(primary_archive)
+                    default_target = self_sign_target
+            wr.default(default_target)
 
 
 def set_cwd():

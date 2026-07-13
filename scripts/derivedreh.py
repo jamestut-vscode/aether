@@ -4,10 +4,7 @@ import os
 import argparse
 import subprocess
 import shutil
-import multiprocessing
-import threading
 import json
-from typing import Iterable
 from os import path
 from contextlib import contextmanager
 
@@ -24,8 +21,6 @@ CONT_NAME = "binutils:latest"
 CONT_BLD_FILE = "scripts/containerfiles/binutils.containerfile"
 # base work directory for REH derivation
 BASE_DR_WORKDIR = "work/derivedreh"
-# final output packaging dir
-BASE_PACKAGING_DIR = "work/packaging"
 # strip ELF binaries (can be modified via command-line args)
 STRIP = False
 
@@ -40,34 +35,11 @@ def REPODIR() -> str:
     repodir = subprocess.check_output(['git', 'rev-parse', '--show-toplevel'], cwd=cwd)
     return repodir.decode('utf8').rstrip()
 
-# commit hash of our base VSCode repo
-@dynconst
-def BASE_COMMIT() -> str:
-    rs = subprocess.check_output(['scripts/get-base-commit.sh'], cwd=REPODIR)
-    return rs.rstrip().decode('ascii')
-
 # tag name of our base VSCode repo
 @dynconst
 def BASE_TAG() -> str:
     rs = subprocess.check_output(['scripts/get-base-commit.sh', '--no-resolve-hash'], cwd=REPODIR)
     return rs.rstrip().decode('ascii')
-
-@dynconst
-def REH_NODE_VERSION():
-    npmrc_path = path.join(REPODIR, BASE_VSCODE_PATH, "remote/.npmrc")
-    target, runtime = None, None
-    with open(npmrc_path) as f:
-        for l in f:
-            k, v = l.split("=", maxsplit=1)
-            if k == "target":
-                target = eval(v)
-            elif k == "runtime":
-                runtime = eval(v)
-    if runtime != "node":
-        raise ValueError("Expected 'node' runtime for REH")
-    if target is None:
-        raise ValueError("Unknown node.js version for REH")
-    return target
 
 # lazy dynamic constants (only evaluated on first call)
 def lazydynconst(fn):
@@ -99,9 +71,6 @@ def clonefile(src: str, tgt: str):
 def replace_file(basefrom: str, baseto: str, fn: str):
     os.unlink(path.join(baseto, fn))
     clonefile(path.join(basefrom, fn), path.join(baseto, fn))
-
-def rimraf(target: str):
-    subprocess.check_output(["rm", "-rf", target])
 
 def make_executable(target: str):
     subprocess.check_output(["chmod", "+x", target])
@@ -410,33 +379,6 @@ targets = {
     'linux-portable-arm64': LinuxPortable,
 }
 
-class ParallelArchiver:
-    def __init__(self, njobs: int):
-        self.sem = threading.Semaphore(njobs)
-        self.allthreads: list[threading.Thread] = []
-
-    def add_job(self, cwd: str, src: str, target: str):
-        '''
-        jobs: list of (cwd, src, target)
-        '''
-        if path.exists(target): return
-        self.sem.acquire(True)
-        t = threading.Thread(target=lambda: self._job_thread(cwd, src, target))
-        self.allthreads.append(t)
-        t.start()
-
-    def wait_all_jobs(self):
-        for t in self.allthreads:
-            t.join()
-        self.allthreads.clear()
-
-    def _job_thread(self, cwd: str, src: str, target: str):
-        args = ["tar", "--uid", "0", "--gid", "0", "-cJ", "-f", target, src]
-        try:
-            subprocess.check_call(args, cwd=cwd)
-        finally:
-            self.sem.release()
-
 class Builder:
     def __init__(self):
         self.target_instances = {target: clazz(target) for target, clazz in targets.items()}
@@ -473,12 +415,6 @@ class Builder:
             bldinst.run(workdir, *depworkdirs)
         self.targets_built.add(target)
 
-    def do_archive(self, target: str, archiver: ParallelArchiver):
-        workdir = self.target_workdir(target)
-        bldinst = self.target_instances[target]
-        output_archive = path.join(REPODIR, BASE_PACKAGING_DIR, f"{bldinst.output_name}.tar.xz")
-        archiver.add_job(workdir, bldinst.output_name, output_archive)
-
     @staticmethod
     def target_workdir(target: str) -> str:
         ret = path.join(REPODIR, BASE_DR_WORKDIR, target)
@@ -490,16 +426,8 @@ def main():
 
     ap = argparse.ArgumentParser()
     ap.add_argument("--no-strip-elf", action='store_true')
-    ap.add_argument("--no-archive", action='store_true', help="Disable archiving (for debug)")
-    ap.add_argument("--jobs", "-j", type=int, default=multiprocessing.cpu_count(),
-        help="Max number of archival jobs")
     ap.add_argument("targets", choices=ArgPositionMatcher(targets), nargs='*')
     args = ap.parse_args()
-
-    if args.jobs < 1:
-        print("Job numbers must be positive")
-        return 1
-    archiver = ParallelArchiver(args.jobs)
 
     # if request to strip, check if we have podman
     if not args.no_strip_elf:
@@ -521,11 +449,6 @@ def main():
         bldinst.download_prereqs(tgt)
     for tgt in selected_targets:
         bldinst.do_build(tgt)
-    if not args.no_archive:
-        for tgt in selected_targets:
-            print("archive", tgt, "...")
-            bldinst.do_archive(tgt, archiver)
-        archiver.wait_all_jobs()
 
 if __name__ == "__main__":
     sys.exit(main())
