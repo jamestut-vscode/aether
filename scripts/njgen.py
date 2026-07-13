@@ -58,6 +58,8 @@ def main():
         # variables
         wr.variable("vscodedir", VSCODEDIR_REL)
         wr.variable("workdir", WORKDIR_REL)
+        target = '-'.join(PRIMARY_TARGET)
+        wr.variable("target", target)
         wr.newline()
 
         # rules
@@ -81,6 +83,11 @@ def main():
             "copyfile",
             'cp "$source" "$out"',
             description="copy file"
+        )
+        wr.rule(
+            "rimraf",
+            'rm -rf "$rimraf_path" && touch "$out"',
+            description="remove $rimraf_path"
         )
 
         wr.newline()
@@ -112,7 +119,6 @@ def main():
         add_gulp_build(ext_target, "compile-all-extensions", ext_target)
 
         # primary targets (REH and app for the primary target platform)
-        target = '-'.join(PRIMARY_TARGET)
         for reh in [True, False]:
             # REH targets
             variant = 'reh' if reh else ''
@@ -120,20 +126,28 @@ def main():
             add_gulp_build(primary_js, f"minify-vscode{dashify(variant)}",
                 implicit=[base_js_target, ext_target])
             primary_target_prefix = "aether-reh" if reh else "Aether"
-            primary_package = f"$workdir/{primary_target_prefix}-{target}"
+            primary_package = f"$workdir/{primary_target_prefix}-$target"
             primary_package_impl_dep = [primary_js]
             if reh:
                 # node.js main binary
                 node_target = "$vscodedir/.build/node"
-                add_gulp_build(node_target, f"node-{target}")
+                add_gulp_build(node_target, "node-$target")
                 primary_package_impl_dep.append(node_target)
             add_gulp_build(primary_package,
                 rimraf=primary_package,
-                gulptarget=f"package-vscode{dashify(variant)}-{target}",
+                gulptarget=f"package-vscode{dashify(variant)}-$target",
                 touchtarget=primary_package,
                 implicit=primary_package_impl_dep)
-            # macOS app bundle sign
+            # remove copilot platform-specific native module from REH output
             default_target = primary_package
+            if reh:
+                trim_markers = f"$workdir/trim-markers"
+                cleanup_marker = f"{trim_markers}/{primary_target_prefix}-$target.copilot"
+                wr.build(cleanup_marker, "rimraf", implicit=[primary_package],
+                    variables={
+                        "rimraf_path": f"{primary_package}/node_modules/@github/copilot-$target"
+                    })
+                default_target = cleanup_marker
             if not reh and PRIMARY_TARGET[0] == 'darwin':
                 if args.signcertname:
                     app_bundle_path = path.join(primary_package, f"{product_info['nameLong']}.app")

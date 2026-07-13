@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+from posixpath import dirname
 import sys
 import os
 import argparse
@@ -142,6 +143,20 @@ class LinuxGeneric:
             (f"https://update.code.visualstudio.com/{BASE_TAG}/server-{out_name_suff}/{REL_REH_CHANNEL}", self.tarball_name),
         ]
 
+    @staticmethod
+    def is_node_module_container(dirpath: str):
+        '''
+        Return True if the given path contains node.js modules
+        '''
+        if path.basename(dirpath) == "node_modules":
+            # obviously true because this is node_modules
+            return True
+
+        # check for scoped module name
+        if path.basename(path.dirname(dirpath)) == "node_modules" and path.basename(dirpath)[0] == "@":
+            # scoped package
+            return True
+
     def run(self, workdir: str, *_):
         # --- Stage 1: Extract the upstream Linux server tarball (b) ---
         # This provides Linux-native ELF binaries (node, native addons, etc.)
@@ -196,21 +211,16 @@ class LinuxGeneric:
         clonefile(b_node_modules, c_node_modules)
 
         # --- Stage 7: Trim node_modules that (a) doesn't have ---
-        # (b) may carry extra node_modules (e.g. extensions/foo/node_modules/)
-        # that (a) never shipped.  Remove them shallowest-first so that
-        # deleting a parent automatically covers its children.
-        c_paths = []
-        for dirpath, _, _ in os.walk(target_dir):
-            if path.basename(dirpath) == "node_modules":
-                c_paths.append(path.relpath(dirpath, target_dir))
-        c_paths.sort(key=lambda p: p.count(os.sep))
-        for rel_path in c_paths:
-            c_path = path.join(target_dir, rel_path)
-            # skip if already removed as part of a parent directory
-            if not path.exists(c_path):
+        for dirpath, dirnames, _ in os.walk(path.join(target_dir, "node_modules")):
+            if not self.__class__.is_node_module_container(dirpath):
                 continue
-            if not path.exists(path.join(a_base, rel_path)):
-                shutil.rmtree(c_path)
+            # path relative to the (c)
+            dirpath_rel = path.relpath(dirpath, target_dir)
+            for i, dirname in reversed(list(enumerate(dirnames))):
+                # if this module doesn't exist in (a), trim
+                if not path.exists(path.join(a_base, dirpath_rel, dirname)):
+                    shutil.rmtree(path.join(dirpath, dirname))
+                    del dirnames[i]
 
         # --- Stage 8: Strip ELF binaries in the assembled output ---
         # Now that (c) has its final set of node_modules, strip all ELF
