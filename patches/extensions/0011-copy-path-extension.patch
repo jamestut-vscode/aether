@@ -52,6 +52,6 @@ index 00000000..b9b286c6
 --- /dev/null
 +++ b/extensions/vscext-copy-path
 @@ -0,0 +1 @@
-+Subproject commit 15bc08cc962c83ac877c82114e5dd3554a0bef4c
++Subproject commit 85e287d3282576d51cbcd37a7d1da742697a0dc3
 --
 2.39.5 (Apple Git-154)
