@@ -1,0 +1,37 @@
+From ffda47dffe0ffe6fe00b6a14e6437a9160273aab Mon Sep 17 00:00:00 2001
+From: James <aslan.jnn@gmail.com>
+Date: Mon, 20 Jul 2026 19:36:13 +1000
+Subject: [PATCH] Add "Attach VS Code" compound launch configuration
+
+---
+ .vscode/launch.json | 14 ++++++++++++++
+ 1 file changed, 14 insertions(+)
+
+diff --git a/.vscode/launch.json b/.vscode/launch.json
+index 709ebc45..3c937fab 100644
+--- a/.vscode/launch.json
++++ b/.vscode/launch.json
+@@ -737,6 +737,20 @@
+ 				"order": 1
+ 			}
+ 		},
++		{
++			"name": "Attach VS Code",
++			"stopAll": true,
++			"configurations": [
++				"Attach to Main Process",
++				"Attach to Extension Host",
++				"Attach to Shared Process",
++				"Attach to Agent Host Process"
++			],
++			"presentation": {
++				"group": "0_vscode",
++				"order": 1
++			}
++		},
+ 		{
+ 			"name": "VS Code Agents",
+ 			"stopAll": true,
+-- 
+2.54.0 (Apple Git-156)
+

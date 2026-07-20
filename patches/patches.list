@@ -1,6 +1,8 @@
 base-commit: 1.127.0
 final-commit: ignore
 
+devenv/0001-Add-attach-vscode-debug.patch
+
 common/0001-Allow-proposed-API-for-all-extensions.patch
 common/0002-Optimise-theme-detection.patch
 common/0003-Disable-auto-editor-group-expansion.patch
