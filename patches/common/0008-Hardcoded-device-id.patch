@@ -1,0 +1,38 @@
+From 0000000000000000000000000000000000000000 Mon Sep 17 00:00:00 2001
+From: James <aslan.jnn@gmail.com>
+Date: Sun, 20 Jul 2026 00:00:00 +1000
+Subject: Hardcoded dev device ID
+
+---
+ src/vs/base/node/id.ts | 11 ++---------
+ 1 file changed, 2 insertions(+), 9 deletions(-)
+
+diff --git a/src/vs/base/node/id.ts b/src/vs/base/node/id.ts
+index 025b1487..025b1487 100644
+--- a/src/vs/base/node/id.ts
++++ b/src/vs/base/node/id.ts
+@@ -8,7 +8,6 @@ import { TernarySearchTree } from '../common/ternarySearchTree.js';
+ import * as uuid from '../common/uuid.js';
+ import { getMac } from './macAddress.js';
+ import { isWindows } from '../common/platform.js';
+-import { stripUTF8BOM } from '../common/strings.js';
+ 
+ // http://www.techrepublic.com/blog/data-center/mac-address-scorecard-for-common-virtual-machine-platforms/
+ // VMware ESX 3, Server, Workstation, Player	00-50-56, 00-0C-29, 00-05-69
+@@ -117,12 +116,6 @@ export async function getSqmMachineId(errorLogger: (error: Error) => void): Prom
+ }
+ 
+ export async function getDevDeviceId(errorLogger: (error: Error) => void): Promise<string> {
+-	try {
+-		const deviceIdPackage = await import('@vscode/deviceid');
+-		const id = await deviceIdPackage.getDeviceId();
+-		return stripUTF8BOM(id);
+-	} catch (err) {
+-		errorLogger(err);
+-		return uuid.generateUuid();
+-	}
++	// hardcoded ID
++	return "546509c7-ca2d-4590-984e-0ad61ba88bdb";
+ }
+-- 
+2.54.0 (Apple Git-156)

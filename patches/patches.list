@@ -10,6 +10,7 @@ common/0004-Recent-open-host-independent.patch
 common/0005-Large-file-extension-sync.patch
 common/0006-Disable-extension-signature-verification.patch
 common/0007-Copilot-default-disable.patch
+common/0008-Hardcoded-device-id.patch
 common/0010-Disable-REH-glibc-check.patch
 
 windowing/0001-disable-macOS-new-tab.patch
