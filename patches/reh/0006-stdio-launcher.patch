@@ -216,7 +216,7 @@ index 00000000000..0b0b77aad4e
 +	console.log('  --server-data-dir DIR');
 +	console.log(`    Set remote server's data directory (default: ~/${serverDataFolderName})`);
 +	console.log('  --socket-path PATH');
-+	console.log('    Set socket path (default: <server-data-dir>/vscode-server.sock)');
++	console.log('    Set socket path (default: <server-data-dir>/aether-server.sock)');
 +	console.log('  --remote-auto-shutdown-timeout SEC');
 +	console.log(`    Set server auto shutdown timeout (default: ${DEFAULT_SHUTDOWN_TIMEOUT} seconds)`);
 +	console.log('');
@@ -280,7 +280,7 @@ index 00000000000..0b0b77aad4e
 +
 +	// also socket directory
 +	const userSocketPath = resolveAbsolutePath(ap.get('--socket-path'), '--socket-path');
-+	socketPath = userSocketPath ?? path.resolve(remoteDataDir, 'vscode-server.sock');
++	socketPath = userSocketPath ?? path.resolve(remoteDataDir, 'aether-server.sock');
 +
 +	// run in daemon mode if needed
 +	if (ap.has('--daemon')) {
