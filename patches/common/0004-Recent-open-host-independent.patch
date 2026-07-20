@@ -1,18 +1,18 @@
-From d5aa3edcac361fbd76dd78391c58910c207990c7 Mon Sep 17 00:00:00 2001
+From 898bb35307183bb8bd2cd3dffeee464b77f0fe06 Mon Sep 17 00:00:00 2001
 From: James <aslan.jnn@gmail.com>
-Date: Sun, 19 Jan 2025 15:12:47 +1100
+Date: Mon, 20 Jul 2026 19:45:30 +1000
 Subject: Host independent recent files
 
 ---
- .../electron-main/windowsMainService.ts       | 34 +++++++++++++++++--
- .../workspacesHistoryMainService.ts           | 19 ++++++++++-
- 2 files changed, 49 insertions(+), 4 deletions(-)
+ .../electron-main/windowsMainService.ts       | 39 +++++++++++++++++--
+ .../workspacesHistoryMainService.ts           | 19 ++++++++-
+ 2 files changed, 54 insertions(+), 4 deletions(-)
 
 diff --git a/src/vs/platform/windows/electron-main/windowsMainService.ts b/src/vs/platform/windows/electron-main/windowsMainService.ts
-index f441f7d5fb7..6cc1c99ac07 100644
+index aa4b8cad..aff9663e 100644
 --- a/src/vs/platform/windows/electron-main/windowsMainService.ts
 +++ b/src/vs/platform/windows/electron-main/windowsMainService.ts
-@@ -301,6 +301,37 @@ export class WindowsMainService extends Disposable implements IWindowsMainServic
+@@ -356,6 +356,42 @@ export class WindowsMainService extends Disposable implements IWindowsMainServic
  		let filesToOpen: IFilesToOpen | undefined;
  		let maybeOpenEmptyWindow = false;
  
@@ -28,11 +28,16 @@ index f441f7d5fb7..6cc1c99ac07 100644
 +				} else {
 +					uri = openable.fileUri;
 +				}
-+				const newUri = URI.from({
-+					scheme: 'vscode-remote',
-+					authority: remoteAuthority,
-+					path: uri.path
-+				});
++				// Re-attach the remote authority to host-stripped recents (which are stored as `file://` URIs with a remote-OS path).
++				// Genuinely local `file://` openables, notably untitled workspaces created by the "Duplicate Workspace" action,
++				// which live under the client's `untitledWorkspacesHome`, must be left untouched so the new remote
++				// window still resolves them against the local disk provider rather than looking for them on the remote host.
++				let newUri: URI;
++				if (uri.scheme === Schemas.file && !extUriBiasedIgnorePathCase.isEqualOrParent(uri, this.environmentMainService.untitledWorkspacesHome)) {
++					newUri = URI.from({ scheme: 'vscode-remote', authority: remoteAuthority, path: uri.path });
++				} else {
++					newUri = uri;
++				}
 +				if (isWorkspaceToOpen(openable)) {
 +					return { workspaceUri: newUri };
 +				} else if (isFolderToOpen(openable)) {
@@ -50,7 +55,7 @@ index f441f7d5fb7..6cc1c99ac07 100644
  		// Identify things to open from open config
  		const pathsToOpen = await this.getPathsToOpen(openConfig);
  		this.logService.trace('windowsManager#open pathsToOpen', pathsToOpen);
-@@ -1114,9 +1145,6 @@ export class WindowsMainService extends Disposable implements IWindowsMainServic
+@@ -1242,9 +1278,6 @@ export class WindowsMainService extends Disposable implements IWindowsMainServic
  
  			const fileUri = URI.file(path);
  
@@ -61,10 +66,10 @@ index f441f7d5fb7..6cc1c99ac07 100644
  			if (options.ignoreFileNotFound && error.code === 'ENOENT') {
  				return {
 diff --git a/src/vs/platform/workspaces/electron-main/workspacesHistoryMainService.ts b/src/vs/platform/workspaces/electron-main/workspacesHistoryMainService.ts
-index 0ee2bec4960..f398dd9bcd1 100644
+index 560f5ca4..7722e9df 100644
 --- a/src/vs/platform/workspaces/electron-main/workspacesHistoryMainService.ts
 +++ b/src/vs/platform/workspaces/electron-main/workspacesHistoryMainService.ts
-@@ -79,7 +79,24 @@ export class WorkspacesHistoryMainService extends Disposable implements IWorkspa
+@@ -81,7 +81,24 @@ export class WorkspacesHistoryMainService extends Disposable implements IWorkspa
  		let workspaces: Array<IRecentFolder | IRecentWorkspace> = [];
  		let files: IRecentFile[] = [];
  
@@ -91,4 +96,5 @@ index 0ee2bec4960..f398dd9bcd1 100644
  			// Workspace
  			if (isRecentWorkspace(recent)) {
 -- 
-2.39.5 (Apple Git-154)
+2.54.0
+
